@@ -13,8 +13,10 @@
 	},
 	"dependencies": {
 		"hono": "4.11.1",
+		"playwright": "^1.60.0",
 		"react": "19.2.1",
-		"react-dom": "19.2.1"
+		"react-dom": "19.2.1",
+		"tesseract.js": "^7.0.0"
 	},
 	"devDependencies": {
 		"@cloudflare/vite-plugin": "1.15.3",

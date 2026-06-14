@@ -1,127 +1,76 @@
 import fs from 'fs';
 import puppeteer from 'puppeteer';
+import { createWorker } from 'tesseract.js';
 
-async function scrapeRankVisible() {
-    console.log("🚀 Meluncurkan browser visual (Selenium-style)...");
-
-    // Konfigurasi Browser
-    const browser = await puppeteer.launch({
-        headless: false, // Menampilkan browser (PENTING!)
-        slowMo: 100,      // Melambatkan operasi Puppeteer 100ms agar bisa diikuti mata
-        devtools: false,   // Set true jika ingin otomatis membuka Inspect Element
-        args: ['--start-maximized'] // Buka browser dalam kondisi full screen
-    });
-
+async function scrapeDenganMataOCR() {
+    console.log("1. Membuka browser...");
+    const browser = await puppeteer.launch({ headless: false });
     const page = await browser.newPage();
 
-    // Set viewport mengikuti ukuran layar maximized agar selector tidak meleset
-    await page.setViewport({ width: 1920, height: 1080 });
+    // Set ukuran layar agak lebar agar tulisan heronya jelas dan besar
+    await page.setViewport({ width: 1280, height: 1000 });
 
-    console.log("🌐 Membuka https://www.mobilelegends.com/rank ...");
-    console.log("💡 Silakan perhatikan browser yang terbuka. Jangan ditutup manual.");
+    console.log("2. Menuju website...");
+    await page.goto('https://www.mobilelegends.com/rank', { waitUntil: 'networkidle2' });
+
+    // ====================================================================
+    // WAKTU KLIK MANUAL
+    // ====================================================================
+    console.log("⚠️  SILAKAN CLOSE POP-UP / COOKIE SEKARANG!");
+    console.log("⏳ Menunggu kamu merapikan layar (10 detik)...");
+    await new Promise(resolve => setTimeout(resolve, 10000));
+    // ====================================================================
+
+    console.log("📸 3. Cekrek! Mengambil screenshot halaman web...");
+    // Puppeteer memoto layar dan menyimpannya jadi file 'halaman_rank.png'
+    await page.screenshot({ path: 'halaman_rank.png', fullPage: false });
+    console.log("📸 Screenshot berhasil disimpan ke './halaman_rank.png'");
+
+    console.log("🔒 Menutup browser karena tugas matanya sudah selesai...");
+    await browser.close();
+
+    // ====================================================================
+    // PROSES MEMBACA GAMBAR (OCR)
+    // ====================================================================
+    console.log("🧠 4. Memulai kecerdasan buatan (OCR) untuk membaca gambar...");
 
     try {
-        // Buka websitenya
-        await page.goto('https://www.mobilelegends.com/rank', {
-            waitUntil: 'networkidle2', // Tunggu sampai jaringan tenang
-            timeout: 90000            // Beri waktu muat lebih lama (90 detik)
-        });
+        // Inisialisasi Tesseract OCR dengan bahasa Inggris ('eng')
+        const worker = await createWorker('eng');
 
-        // ====================================================================
-// KHUSUS HANDLE POP-UP PRIVACY POLICY
-// ====================================================================
-        console.log("🛡️ Memeriksa apakah ada pop-up Privacy Policy...");
+        // Perintahkan OCR mengenali teks di dalam gambar hasil screenshot tadi
+        const { data: { text } } = await worker.recognize('halaman_rank.png');
+        await worker.terminate();
 
-// Kita gunakan class yang kamu temukan tadi sebagai selector utama
-        const popupButtonSelector = '.mt-cb-policy-close';
+        console.log("\n====================================");
+        console.log("👁️ HASIL BACAAN MATA OCR:");
+        console.log("====================================");
 
-        try {
-            // Tunggu sampai tombol silang/close pop-up muncul di layar (maksimal 5 detik)
-            await page.waitForSelector(popupButtonSelector, { timeout: 5000 });
+        // Memecah hasil bacaan gambar per baris teks
+        const barisTeks = text.split('\n');
 
-            // Klik tombol close tersebut
-            await page.click(popupButtonSelector);
-            console.log("✅ Pop-up Privacy Policy berhasil ditutup!");
+        // Mari kita cari kata "HERO" dan print 5 baris di bawahnya (seperti mata manusia)
+        const indexHero = barisTeks.findIndex(line => line.toUpperCase().includes('HERO'));
 
-            // Kasih jeda 1,5 detik agar animasi pop-up menghilang selesai sempurna
-            await new Promise(resolve => setTimeout(resolve, 1500));
-        } catch (e) {
-            // Jika tidak muncul dalam 5 detik, berasumsi pop-up sudah aman/tidak ada
-            console.log("ℹ️ Pop-up tidak muncul. Lanjut ke proses scraping tabel...");
-        }
-// ====================================================================
+        if (indexHero !== -1) {
+            console.log(`\nKetemu tulisan 'HERO' di baris ke-${indexHero}.`);
+            console.log("Menggeser mata ke bawah untuk melihat nama-nama hero:\n");
 
-        console.log("⏳ Memberi jeda agar konten tabel termuat...");
-
-        // Tidak lagi menunggu selector .rank-list; cukup beri jeda agar
-        // konten dan animasi loading internal selesai dimuat.
-        await new Promise(resolve => setTimeout(resolve, 3000));
-
-        console.log("🔍 Memulai ekstraksi data dari HTML DOM...");
-
-        // Mengekstrak data langsung dari elemen HTML
-        const heroRows = await page.evaluate(() => {
-            // Selector untuk SETIAP BARIS HERO (tr di dalam tbody rank-list)
-            const rows = document.querySelectorAll('.rank-list tbody tr');
-            const data = [];
-
-            rows.forEach(row => {
-                // Selector berdasarkan inspect element di https://www.mobilelegends.com/rank
-                const nameEl = row.querySelector('.hero-name p'); // Nama hero ada di dalam p
-
-                // Di struktur tabel Moonton:
-                // TD ke-1: Ranking
-                // TD ke-2: Hero (Icon & Name)
-                // TD ke-3: Win Rate
-                // TD ke-4: Use Rate (Pick Rate)
-                // TD ke-5: Ban Rate
-                const stats = row.querySelectorAll('td');
-
-                if (nameEl && stats.length >= 4) {
-                    data.push({
-                        name: nameEl.innerText.trim(),
-                        win_rate: stats[2]?.innerText.trim() || '0%', // TD index 2
-                        pick_rate: stats[3]?.innerText.trim() || '0%' // TD index 3
-                    });
+            // Ambil 5 baris di bawah tulisan HERO
+            for (let i = 1; i <= 6; i++) {
+                if (barisTeks[indexHero + i]) {
+                    console.log(`👉 Baris bawah ke-${i}: ${barisTeks[indexHero + i].trim()}`);
                 }
-            });
-            return data;
-        });
-
-        console.log(`📦 Berhasil mengambil ${heroRows.length} hero.`);
-
-        // Simpan ke CSV
-        if (heroRows.length > 0) {
-            saveToCSV(heroRows);
+            }
         } else {
-            throw new Error("Gagal mengambil data dari HTML DOM. Selector mungkin salah.");
+            console.log("❌ Mata OCR tidak melihat tulisan 'HERO' di foto tersebut.");
+            console.log("Coba kamu buka file 'halaman_rank.png', apakah tabelnya buram atau terpotong?");
         }
+        console.log("====================================\n");
 
-    } catch (error) {
-        console.error("❌ Terjadi kesalahan:", error.message);
-        console.log("💡 Jika browser terbuka tapi gagal, kemungkinan ada pop-up/iklan yang menghalangi tabel atau selector .rank-list tbody tr sudah berubah.");
-    } finally {
-        // Beri waktu 5 detik sebelum menutup browser agar kamu bisa melihat hasil akhirnya
-        console.log("⏳ Menutup browser dalam 5 detik...");
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        await browser.close();
-        console.log("🔒 Browser ditutup.");
+    } catch (ocrError) {
+        console.error("❌ Gagal membaca gambar:", ocrError.message);
     }
 }
 
-function saveToCSV(heroes) {
-    // Header CSV sesuai request: ID ditiadakan karena dari DOM HTML susah dapet ID murni
-    let csvContent = "Hero Name,Win Rate,Pick Rate\n";
-
-    heroes.forEach(hero => {
-        // Escape names containing commas
-        const cleanName = hero.name.includes(',') ? `"${hero.name}"` : hero.name;
-        csvContent += `${cleanName},${hero.win_rate},${hero.pick_rate}\n`;
-    });
-
-    fs.writeFileSync('data_hero.csv', csvContent, 'utf8');
-    console.log("✅ File data_hero.csv berhasil diperbarui!");
-}
-
-// Jalankan Scraper Visual
-scrapeRankVisible();
+scrapeDenganMataOCR();
