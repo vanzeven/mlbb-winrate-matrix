@@ -1,15 +1,19 @@
-import fs from 'fs';
-import puppeteer from 'puppeteer';
+import fs from "fs";
+import { chromium } from 'playwright'; // Menggunakan Playwright
 import { createWorker } from 'tesseract.js';
 
 async function scrapeOCRKeCSV() {
     console.log("1. Membuka browser...");
-    const browser = await puppeteer.launch({ headless: false });
-    const page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 1000 });
+    // Di Playwright, kita pakai chromium (atau firefox/webkit)
+    const browser = await chromium.launch({ headless: false });
+    const context = await browser.newContext({
+        viewport: { width: 1280, height: 1000 }
+    });
+    const page = await context.newPage();
 
     console.log("2. Menuju website...");
-    await page.goto('https://www.mobilelegends.com/rank', { waitUntil: 'networkidle2' });
+    // Di Playwright, 'networkidle2' diganti menjadi 'networkidle'
+    await page.goto('https://www.mobilelegends.com/rank', { waitUntil: 'networkidle' });
 
     console.log("⚠️  SILAKAN CLOSE POP-UP / COOKIE SEKARANG!");
     console.log("⏳ Menunggu kamu merapikan layar (10 detik)...");
@@ -32,32 +36,22 @@ async function scrapeOCRKeCSV() {
         if (indexHero !== -1) {
             console.log("\n🔍 Menyaring data kotor dan membuat CSV...");
 
-            // 1. Siapkan Header untuk file CSV
             let csvContent = "Raw Data\n";
             let totalHeroTerfilter = 0;
 
-            // Kita ambil baris-baris setelah tulisan "HERO"
             const barisSetelahHero = barisTeks.slice(indexHero + 1);
 
             barisSetelahHero.forEach(baris => {
                 const barisBersih = baris.trim();
 
-                // TRICK FILTER: Kita hanya ambil baris yang panjangnya > 10 karakter
-                // DAN mengandung minimal satu tanda persen (%)
                 if (barisBersih.length > 10 && barisBersih.includes('%')) {
-
-                    // Ganti tanda koma (,) bawaan teks menjadi spasi agar tidak merusak kolom CSV
                     const dataAmanUntukCsv = barisBersih.replace(/,/g, ' ');
-
-                    // Masukkan ke baris CSV
                     csvContent += `"${dataAmanUntukCsv}"\n`;
-
                     totalHeroTerfilter++;
                     console.log(`✅ Lolos Filter: ${dataAmanUntukCsv}`);
                 }
             });
 
-            // 2. Simpan string CSV di atas menjadi file nyata (.csv)
             const namaFileCsv = 'data_hero_ocr.csv';
             fs.writeFileSync(namaFileCsv, csvContent, 'utf8');
 
